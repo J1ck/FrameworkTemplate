@@ -18,13 +18,6 @@
         "$path": "src/StarterPlayerScripts",
         "$ignoreUnknownInstances": true
       }
-    },
-
-    "HttpService": {
-      "$className": "HttpService",
-      "$properties": {
-        "HttpEnabled": true
-      }
     }
   }
 }
