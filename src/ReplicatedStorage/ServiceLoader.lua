@@ -3,9 +3,59 @@ local IGNORE_ATTRIBUTE_NAME = "Ignore"
 local IGNORE_DESCENDANTS_ATTRIBUTE_NAME = "IgnoreDescendants"
 local LOAD_ORDER_ATTRIBUTE_NAME = "LoadOrder"
 local DEFAULT_LOAD_ORDER = 1
+local STATIC_INSTANCE_ATTRIBUTES = {
+	{
+		Path = {"ReplicatedStorage", "Client", "Services", "DataService"},
+		Attributes = {
+			[LOAD_ORDER_ATTRIBUTE_NAME] = -100
+		}
+	},
+	{
+		Path = {"ReplicatedStorage", "Shared", "Services", "NetworkService"},
+		Attributes = {
+			[IGNORE_DESCENDANTS_ATTRIBUTE_NAME] = true
+		}
+	},
+	{
+		Path = {"ServerScriptService", "Server", "Services", "DataService"},
+		Attributes = {
+			[IGNORE_DESCENDANTS_ATTRIBUTE_NAME] = true,
+			[LOAD_ORDER_ATTRIBUTE_NAME] = -100
+		}
+	},
+}
+local UTIL_FUNCTIONS = {
+	GetDictionaryLength = function(Dictionary : {[any] : any?}) : number
+		local Amount = 0
+		
+		for _ in Dictionary do
+			Amount += 1
+		end
+		
+		return Amount
+	end,
+	DeepCopy = function<T>(Table : {[any] : any?} & T) : T
+		-- stupid workaround because this scope doesnt have access to itself
+		local function RecurseCopy<T>(v : {[any] : any?} & T) : T
+			local Clone = table.clone(v)
+		
+			for Index, Value in Clone do
+				if typeof(Value) == "table" then
+					Clone[Index] = RecurseCopy(Value)
+				end
+			end
+			
+			return Clone
+		end
+
+		return RecurseCopy(Table)
+	end,
+}
 
 local Services = {}
 local Classes = {}
+
+local ThreadsWaitingOnLoaded : {[thread] : any} = {}
 
 local function SortTableByLoadOrder(Table : {ModuleScript}) : {ModuleScript}
 	table.sort(Table, function(a, b)
@@ -17,19 +67,28 @@ local function SortTableByLoadOrder(Table : {ModuleScript}) : {ModuleScript}
 	return Table
 end
 
-local Framework = {}
+local function ApplyStaticAttributes(Metadata)
+	local Object = game
 
-Framework.Util = {
-	GetDictionaryLength = function(Dictionary : {[any] : any?}) : number
-		local Amount = 0
-		
-		for _ in Dictionary do
-			Amount += 1
+	for _, ChildName in Metadata.Path do
+		Object = Object:FindFirstChild(ChildName)
+
+		if Object == nil then
+			return
 		end
-		
-		return Amount
-	end,
-}
+	end
+
+	for Name, Value in Metadata.Attributes do
+		Object:SetAttribute(Name, Value)
+	end
+end
+
+for _, v in STATIC_INSTANCE_ATTRIBUTES do
+	ApplyStaticAttributes(v)
+end
+
+local Framework = {}
+Framework.Util = UTIL_FUNCTIONS
 
 function Framework.InitializeService(Module : ModuleScript)
 	if Module:GetAttribute(IGNORE_ATTRIBUTE_NAME) then
@@ -118,8 +177,32 @@ function Framework.new(ClassName : string, ... : any)
 	elseif Class.new == nil or typeof(Class.new) ~= "function" then
 		return warn(`class with name '{ClassName}' does not have a valid constructor`)
 	end
-	
+
 	return Class.new(...)
+end
+
+function Framework.MarkAsLoaded()
+	local CurrentIndex : thread? = next(ThreadsWaitingOnLoaded)
+
+	while CurrentIndex ~= nil do
+		if coroutine.status(CurrentIndex) ~= "dead" then
+			task.spawn(CurrentIndex)
+		end
+
+		ThreadsWaitingOnLoaded[CurrentIndex] = nil
+
+		CurrentIndex = next(ThreadsWaitingOnLoaded)
+	end
+end
+
+function Framework.WaitUntilLoaded() : typeof(Framework)
+	local CurrentThread = coroutine.running()
+
+	ThreadsWaitingOnLoaded[CurrentThread] = true
+
+	coroutine.yield(CurrentThread)
+
+	return Framework
 end
 
 return Framework
