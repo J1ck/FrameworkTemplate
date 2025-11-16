@@ -1,5 +1,4 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 
 local Serializer = require(ReplicatedStorage:WaitForChild("PLAYER_DATA_SERIALIZER"))
 
@@ -17,7 +16,7 @@ local ProfileStoreWrapper = {}
 
 local ChangedPackages : {[ChangedPackage] : any} = {}
 local ProfileData : MiscTable = {}
-local LastProfileDataDeepCopy : MiscTable = {}
+local LastProfileDataDeepCopy : MiscTable = nil
 
 local function DeepCopy<T>(Table : T & MiscTable) : T
 	local Clone = table.clone(Table)
@@ -53,7 +52,7 @@ local function FireChangedCallbacks(Added : MiscTable, Removed : MiscTable)
 		local AddedPath = ProfileStoreWrapper.GetDataFromPath(Added, Package.Path)
 		local RemovedPath = ProfileStoreWrapper.GetDataFromPath(Removed, Package.Path)
 
-		if AddedPath or RemovedPath then
+		if AddedPath ~= nil or RemovedPath ~= nil then
 			task.spawn(Package.Callback, ProfileStoreWrapper.GetDataFromPath(ProfileStoreWrapper.GetDataAsync(), Package.Path))
 		end
 	end
@@ -123,6 +122,10 @@ function ProfileStoreWrapper.GetDataFromPath(RootTable : MiscTable, DataPath : D
 	return RootTable
 end
 
-ListenToDataChanges()
+function ProfileStoreWrapper.OnInitialized()
+	ListenToDataChanges()
+	
+	ProfileStoreWrapper.GetDataAsync()
+end
 
 return ProfileStoreWrapper

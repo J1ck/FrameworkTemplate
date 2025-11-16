@@ -1,9 +1,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local ProfileStore = require(script:WaitForChild("ProfileStore"))
-local DefaultData = require(script:WaitForChild("DefaultData"))
-local Serializer = require(script:WaitForChild("Serializer"))
+local ProfileStore = require(script.ProfileStore)
+local DefaultData = require(script.DefaultData)
+local Serializer = require(script.Serializer)
 
 local PlayerDataChangedRemote = Instance.new("RemoteEvent")
 PlayerDataChangedRemote.Name = "PLAYER_DATA_CHANGED"
@@ -13,7 +13,11 @@ local SerializerModule = script:FindFirstChild("Serializer")
 SerializerModule.Name = "PLAYER_DATA_SERIALIZER"
 SerializerModule.Parent = ReplicatedStorage
 
-local PlayerStore = ProfileStore.New("PlayerStore", DefaultData)
+local PlayerStore = ProfileStore.New(`PlayerStore_0.1`, DefaultData)
+
+if game:GetService("RunService"):IsStudio() then
+	PlayerStore = PlayerStore.Mock
+end
 
 type ChangedPackage = {
 	Callback : (NewValue : any) -> (),
@@ -95,7 +99,7 @@ local function FireChangedCallbacks(Profile : Profile, Added : MiscTable, Remove
 		local AddedPath = ProfileStoreWrapper.GetDataFromPath(Added, Package.Path)
 		local RemovedPath = ProfileStoreWrapper.GetDataFromPath(Removed, Package.Path)
 
-		if AddedPath or RemovedPath then
+		if AddedPath ~= nil or RemovedPath ~= nil then
 			task.spawn(Package.Callback, ProfileStoreWrapper.GetDataFromPath(Profile.Data, Package.Path))
 		end
 	end
@@ -138,7 +142,9 @@ function ProfileStoreWrapper.StartSessionAsync(Player : Player)
 	})
 
 	if Profile == nil then
-		return Player:Kick(`Data had Trouble Loading, Please Rejoin!`)
+		Player:Kick(`Data had Trouble Loading, Please Rejoin!`)
+
+		return
 	end
 	
 	Profile:AddUserId(Player.UserId)
@@ -156,6 +162,9 @@ function ProfileStoreWrapper.StartSessionAsync(Player : Player)
 	Profile._ChangedPackages = {}
 	
 	ActiveProfiles[Player] = Profile
+	
+	ReplicateDataChange(Profile, Profile.Data, {})
+	FireChangedCallbacks(Profile, Profile.Data, {})
 end
 
 function ProfileStoreWrapper.EndSessionAsync(Player : Player)
